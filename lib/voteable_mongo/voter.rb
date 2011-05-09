@@ -27,8 +27,8 @@ module Mongo
             votee_id = options[:votee_id]
           end
         end
-      
-        votee_class.voted?(:voter_id => id, :votee_id => votee_id)
+        
+        votee_class.voted?(:voter_id => id, :votee_id => votee_id, :ar_voter => ar_voter?)
       end
 
       # Get the voted value on a votee
@@ -43,7 +43,12 @@ module Mongo
             :_id => options[:votee_id]
           ).first
         end
-        votee.vote_value(_id)
+        
+        if ar_voter?
+          votee.ar_vote_value(_id)
+        else  
+          votee.vote_value(_id)
+        end  
       end
     
       # Cancel the vote on a votee
@@ -55,6 +60,7 @@ module Mongo
         end
         options[:unvote] = true
         options[:revote] = false
+        options[:ar_voter] = ar_voter?
         vote(options)
       end
 
@@ -86,8 +92,14 @@ module Mongo
       
         options[:voter] = self
         options[:voter_id] = id
+        options[:ar_voter] = ar_voter?
 
         ( votee || votee_class ).vote(options)
+      end
+      
+      # This method returns true for an ActiveRecord Voter Model
+      def ar_voter?
+        self.class.superclass == ActiveRecord::Base
       end
     end
     

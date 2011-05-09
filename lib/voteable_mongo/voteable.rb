@@ -38,6 +38,21 @@ module Mongo
         voter_id = voter.is_a?(::BSON::ObjectId) ? voter : voter.id
         where('votes.down' => voter_id)
       }
+      
+      scope :ar_voted_by, lambda { |voter|
+        voter_id = voter.is_a?(Fixnum) ? voter : voter.id
+        where('$or' => [{ 'votes.up' => voter_id }, { 'votes.down' => voter_id }])
+      }
+
+      scope :ar_up_voted_by, lambda { |voter|
+        voter_id = voter.is_a?(Fixnum) ? voter : voter.id
+        where('votes.up' => voter_id)
+      }
+
+      scope :ar_down_voted_by, lambda { |voter|
+        voter_id = voter.is_a?(Fixnum) ? voter : voter.id
+        where('votes.down' => voter_id)
+      }
     end
 
     # How many points should be assigned for each up or down vote and other options
@@ -84,7 +99,11 @@ module Mongo
       # @return [true, false]
       def up_voted?(options)
         validate_and_normalize_vote_options(options)
-        up_voted_by(options[:voter_id]).where(:_id => options[:votee_id]).count == 1
+        if options[:ar_voter]
+          ar_up_voted_by(options[:voter_id]).where(:_id => options[:votee_id]).count == 1
+        else  
+          up_voted_by(options[:voter_id]).where(:_id => options[:votee_id]).count == 1
+        end  
       end
       
       # Check if voter_id do a down vote on votee_id
@@ -96,7 +115,11 @@ module Mongo
       # @return [true, false]
       def down_voted?(options)
         validate_and_normalize_vote_options(options)
-        down_voted_by(options[:voter_id]).where(:_id => options[:votee_id]).count == 1
+        if options[:ar_voter]
+          ar_down_voted_by(options[:voter_id]).where(:_id => options[:votee_id]).count == 1
+        else  
+          down_voted_by(options[:voter_id]).where(:_id => options[:votee_id]).count == 1
+        end  
       end
 
       def create_voteable_indexes
@@ -130,9 +153,17 @@ module Mongo
         options[:voter_id] ||= options[:voter].id
 
         if options[:unvote]
-          options[:value] ||= vote_value(options[:voter_id])
+          if options[:ar_voter]
+            options[:value] ||= ar_vote_value(options[:voter_id])
+          else  
+            options[:value] ||= vote_value(options[:voter_id])
+          end  
         else
-          options[:revote] ||= vote_value(options[:voter_id]).present?
+          if options[:ar_voter]
+            options[:revote] ||= ar_vote_value(options[:voter_id]).present?
+          else  
+            options[:revote] ||= vote_value(options[:voter_id]).present?
+          end  
         end
 
         self.class.vote(options)
@@ -146,9 +177,19 @@ module Mongo
         return :up if up_voter_ids.include?(voter_id)
         return :down if down_voter_ids.include?(voter_id)
       end
+      
+      def ar_vote_value(voter)
+        voter_id = voter.is_a?(Fixnum) ? voter : voter.id
+        return :up if up_voter_ids.include?(voter_id)
+        return :down if down_voter_ids.include?(voter_id)
+      end
     
       def voted_by?(voter)
-        !!vote_value(voter)
+        if voter.ar_voter?
+          !!ar_vote_value(voter)
+        else
+          !!vote_value(voter)
+        end    
       end
 
       # Array of up voter ids
